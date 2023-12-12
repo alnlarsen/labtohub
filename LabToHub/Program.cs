@@ -156,6 +156,7 @@ while (!completed)
         labmrs = labmrs.OrderBy(x => x.Iid).ToList(); // add issue to github in the same order as they were added in gitlab
 
         var hubprs = await github.PullRequest.GetAllForRepository(hubRepo.Id, new PullRequestRequest { State = ItemStateFilter.All });
+        var hubBranches = (await github.Repository.Branch.GetAll(hubRepo.Id)).Select(b => b.Name).ToHashSet();
 
 //var prj = await gitlab.Projects.GetAsync(Config.GITLAB_REPO_ID);
 //var labRepoUrl = prj.HttpUrlToRepo;
@@ -197,13 +198,30 @@ while (!completed)
             // Checkout the branch from gitlab and push it to github
             // (hack that assumes a bunch of things about an already clone tree in git\opentap)
             Directory.SetCurrentDirectory(Config.LOCAL_CLONE_PATH);
+            if (hubBranches.Add(mr.TargetBranch))
+            {
+                System.Diagnostics.Process.Start("git", $"checkout {mr.TargetBranch}").WaitForExit(10000);
+                System.Diagnostics.Process.Start("git", $"push origin").WaitForExit(10000);
+            }
             System.Diagnostics.Process.Start("git", $"checkout {mr.SourceBranch}").WaitForExit(10000);
             System.Diagnostics.Process.Start("git", $"push origin").WaitForExit(10000);
+
             Thread.Sleep(2000);
 
             // Create the pull request
-            var createdPr = await github.PullRequest.Create(hubRepo.Id, pr);
-            Console.WriteLine($"Created pull request '{mr.Title}'");
+            try
+            {
+                var createdPr = github.PullRequest.Create(hubRepo.Id, pr).GetAwaiter().GetResult();
+                Console.WriteLine($"Created pull request '{mr.Title}'");
+            }
+            catch (ApiValidationException ex)
+            {
+                Console.WriteLine(ex.Message);
+                foreach (var err in ex.ApiError.Errors)
+                {
+                    Console.WriteLine($"\t{err.Message}");
+                }
+            }
         }
 
         completed = true;
