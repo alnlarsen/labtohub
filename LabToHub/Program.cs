@@ -1,6 +1,7 @@
 ﻿using GitLabApiClient;
 using Octokit;
 using System.Globalization;
+using System.Security.Authentication;
 using LabToHub;
 using System.Text.RegularExpressions;
 
@@ -15,7 +16,13 @@ if (!Config.Verify())
 // Get all issues from gitlab project
 string GITLAB_REPO_URL = null;
 int GITLAB_REPO_ID = 0;
-var gitlab = new GitLabClient("http://gitlab.it.keysight.com", Config.GITLAB_ACCESS_TOKEN);
+// We need to disable SSL for the http handler because our certificate has expired and there is no plan to refresh it
+var clientHandler = new HttpClientHandler()
+{
+    ServerCertificateCustomValidationCallback = (_, _, _, _) => true,
+    SslProtocols = SslProtocols.None,
+};
+var gitlab = new GitLabClient("http://gitlab.it.keysight.com", Config.GITLAB_ACCESS_TOKEN, clientHandler);
 var projects = await gitlab.Projects.GetAsync();
 foreach (var project in projects)
 {
